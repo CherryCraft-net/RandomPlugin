@@ -34,7 +34,7 @@ public class LootCommand implements CommandExecutor, TabCompleter {
         }
         Player player = (Player) sender;
         if (args.length == 0) {
-            player.sendMessage(ChatColor.YELLOW + "Usage: /loot <create|edit|apply|list|link|unlink>");
+            player.sendMessage(ChatColor.YELLOW + "Usage: /loot <create|edit|apply|applyrandom|applyall|list|link|unlink>");
             return true;
         }
         String subCommand = args[0].toLowerCase();
@@ -48,6 +48,12 @@ public class LootCommand implements CommandExecutor, TabCompleter {
             case "apply":
                 handleApply(player, args);
                 break;
+            case "applyrandom":
+                handleApplyRandom(player);
+                break;
+            case "applyall":
+                handleApplyAll(player);
+                break;
             case "list":
                 handleList(player);
                 break;
@@ -58,7 +64,7 @@ public class LootCommand implements CommandExecutor, TabCompleter {
                 handleUnlink(player);
                 break;
             default:
-                player.sendMessage(ChatColor.YELLOW + "Usage: /loot <create|edit|apply|list|link|unlink>");
+                player.sendMessage(ChatColor.YELLOW + "Usage: /loot <create|edit|apply|applyrandom|applyall|list|link|unlink>");
                 break;
         }
         return true;
@@ -123,6 +129,62 @@ public class LootCommand implements CommandExecutor, TabCompleter {
         player.sendMessage(ChatColor.GREEN + "Loot applied!");
     }
 
+    private void handleApplyRandom(Player player) {
+        Set<String> templateNames = plugin.getTemplateManager().getTemplateNames();
+        if (templateNames.isEmpty()) {
+            player.sendMessage(ChatColor.RED + "No templates available.");
+            return;
+        }
+        Block targetBlock = player.getTargetBlock(null, 5);
+        if (targetBlock.getType() != Material.CHEST) {
+            player.sendMessage(ChatColor.RED + "You must be looking at a chest.");
+            return;
+        }
+        List<String> nameList = new ArrayList<>(templateNames);
+        String randomTemplateName = nameList.get(new Random().nextInt(nameList.size()));
+        Map<ItemStack, Double> template = plugin.getTemplateManager().getTemplate(randomTemplateName);
+        Chest chest = (Chest) targetBlock.getState();
+        LootFiller.fillChest(chest, template);
+        player.getWorld().spawnParticle(org.bukkit.Particle.VILLAGER_HAPPY, targetBlock.getLocation().add(0.5, 1, 0.5), 30);
+        player.sendMessage(ChatColor.GREEN + "Random loot applied! (Template: " + randomTemplateName + ")");
+    }
+
+    private void handleApplyAll(Player player) {
+        Set<String> templateNames = plugin.getTemplateManager().getTemplateNames();
+        if (templateNames.isEmpty()) {
+            player.sendMessage(ChatColor.RED + "No templates available.");
+            return;
+        }
+
+        int radius = 10;
+        int filledChests = 0;
+        List<String> nameList = new ArrayList<>(templateNames);
+        Random random = new Random();
+
+        Block playerBlock = player.getLocation().getBlock();
+        for (int x = -radius; x <= radius; x++) {
+            for (int y = -radius; y <= radius; y++) {
+                for (int z = -radius; z <= radius; z++) {
+                    Block block = playerBlock.getRelative(x, y, z);
+                    if (block.getType() == Material.CHEST) {
+                        String randomTemplateName = nameList.get(random.nextInt(nameList.size()));
+                        Map<ItemStack, Double> template = plugin.getTemplateManager().getTemplate(randomTemplateName);
+                        Chest chest = (Chest) block.getState();
+                        LootFiller.fillChest(chest, template);
+                        player.getWorld().spawnParticle(org.bukkit.Particle.VILLAGER_HAPPY, block.getLocation().add(0.5, 1, 0.5), 30);
+                        filledChests++;
+                    }
+                }
+            }
+        }
+
+        if (filledChests == 0) {
+            player.sendMessage(ChatColor.RED + "No chests found within " + radius + " blocks.");
+        } else {
+            player.sendMessage(ChatColor.GREEN + "Filled " + filledChests + " chest(s) with random loot!");
+        }
+    }
+
     private void handleList(Player player) {
         player.sendMessage(ChatColor.YELLOW + "Available templates:");
         for (String name : plugin.getTemplateManager().getTemplateNames()) {
@@ -178,7 +240,7 @@ public class LootCommand implements CommandExecutor, TabCompleter {
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) {
-            return StringUtil.copyPartialMatches(args[0], Arrays.asList("create", "edit", "apply", "list", "link", "unlink"), new ArrayList<>());
+            return StringUtil.copyPartialMatches(args[0], Arrays.asList("create", "edit", "apply", "applyrandom", "applyall", "list", "link", "unlink"), new ArrayList<>());
         }
         if (args.length >= 2) {
             String subCommand = args[0].toLowerCase();
